@@ -3,11 +3,24 @@ PLUS_MINUS = 1
 MINUS_PLUS = 2
 MINUS_MINUS = 3
 
-class IEEE754_Float32:
-    def __init__(self, strFloat):
-        self.BIAS = 127
-        self.NUM_EXP = 8
-        self.NUM_MENTISSA = 23
+class IEEE754_Float:
+    def __init__(self, strFloat, precision="single"):
+        if precision=="double":
+            self.precision=precision
+            self.size = 64
+            self.NUM_EXP = 11
+        elif precision=="quad":
+            self.precision=precision
+            self.size = 128
+            self.NUM_EXP = 15            
+
+        else:
+            self.precision="single"
+            self.size= 32
+            self.NUM_EXP = 8
+ 
+        self.NUM_MENTISSA = self.size - self.NUM_EXP - 1  
+        self.BIAS = 2**(self.NUM_EXP-1)      
         # 문자열을 고정소수점 실수로 변환
         sg, numBinStr, pointBinStr = self.deicimalPointStr2FixedBinPointStr(strFloat)
         # 고정소수점 실수를 부동소수로 변환
@@ -34,12 +47,16 @@ class IEEE754_Float32:
         mentissa = self.M | bit_mask
         # 소수점 위의 수 변환
         num = mentissa >> (self.NUM_MENTISSA - exp)
+
         # 소수점 아래 수를 고정 소수점으로
-        point_mask = (2 ** self.NUM_MENTISSA) - 1
-        point_mask = point_mask >> exp
-        point = self.M & point_mask
-        point = point << exp
-        point = self.convBinPoint2DecimalPointStr(point)
+        point = 0 
+        if exp >= 0:
+            point_mask = (2 ** self.NUM_MENTISSA) - 1
+            point_mask = point_mask >> exp
+            point = (self.M & point_mask) << exp
+        else:
+            point = mentissa >> abs(exp)
+        point = self.convBinPoint2DecimalPointStr(point, exp)
         res += str(num)
         res += "."
         res += point
@@ -79,12 +96,15 @@ class IEEE754_Float32:
     # 10진수 소수점 위 숫자를 2진수 문자열로
     def convDecimalString2BinStr(self, inputStr):
         share = int(inputStr)
+        if share == 0:
+            return "0"
         resultStr =""
         while share != 0:
             resultStr += str(share % 2)
             share //= 2
         # 문자열을 거꾸로 뒤집는다
         resultStr = resultStr[::-1]
+        
         return resultStr
 
     # 10진수 소수점 아래의 숫자를 2진수 문자열로
@@ -95,7 +115,7 @@ class IEEE754_Float32:
     # +25000000000000000000000000
     # +06250000000000000000000000
     def convDecimalPointString2BinStr(self, inputStr):
-        MAX_DIGITS = 32
+        MAX_DIGITS = self.size
         string_length = len(inputStr)
         num = int(inputStr)
         tenth_digits = self.countDecimalDigits(num)
@@ -132,12 +152,14 @@ class IEEE754_Float32:
         return S, E, M
 
     # 2진수 고정 소수점을 10진수 소수점으로 변환
-    def convBinPoint2DecimalPointStr(self, value):
-        ten_digits = 15
+    def convBinPoint2DecimalPointStr(self, value, exp):
+        ten_digits = 30
         bin_point = value
         digits = self.countDigits(value)
-        multiplier = 500000000000000 
+        multiplier = 500000000000000000000000000000 
         diff = self.NUM_MENTISSA - digits
+        # if exp < 0:
+        #     multiplier //= (2 ** abs(exp))
         multiplier //= (2 ** diff)
         result = 0
         count = 0
@@ -150,61 +172,16 @@ class IEEE754_Float32:
                 break
         result =str(result)
         result = result.zfill(ten_digits)  
+        # 소수점 끝의 0을 지운다
+        result = result[::-1]
+        # print(int(result))
+        result = str(int(result))[::-1]
         return result
     
     def negate(self, value):
         res = value ^ (2 ** (self.NUM_MENTISSA + 1) - 1)
         res += 1
         return res 
-
-    # # 부동 소수 덧셈 연산자
-    # def __add__(self, other):
-    # 	# 일단 두수의 부호가 같은 경우만 취급
-    # 	s1 = self.S
-    # 	s2 = other.S
-    # 	e1 = self.E
-    # 	e2 = other.E
-    # 	m1 = self.M
-    # 	m2 = other.M
-
-    # 	s3 = 0
-    # 	e3 = 0
-    # 	m3 = 0
-
-    # 	# 덧셈 전에 가수 위에 1.0을 붙여준다
-    # 	bit_mask = (1 << self.NUM_MENTISSA)
-    # 	m1 |= bit_mask
-    # 	m2 |= bit_mask
-    # 	# 지수의 차이만큼 한쪽의 가수부를 오른쪽으로 밀어준다
-    # 	# 그 대신 지수를 올려 맞춘다
-    # 	diff_e = e1 - e2
-    # 	if diff_e > 0:
-    # 		e2 += diff_e
-    # 		m2 = m2 >> diff_e
-    # 	elif diff_e < 0:
-    # 		e1 += abs(diff_e)
-    # 		m1 = m1 >> abs(diff_e)
-
-
-    # 	e3 = e1
-    # 	m3 = m1 + m2
-    # 	overflow_mask = 2 ** (self.NUM_MENTISSA + 1) - 1
-    # 	overflow = False
-    # 	if m3 > overflow_mask:
-    # 		overflow = True
-    # 	if overflow:
-    # 		m3 -= 2 ** (self.NUM_MENTISSA + 1) 
-    # 		m3 = m3 >> 1
-    # 		e3 += 1
-    # 	else:
-    # 		m3 -= 2 ** (self.NUM_MENTISSA)
-        
-    # 	result = IEEE754_Float32("0.0")
-    # 	result.S = s3
-    # 	result.E = e3
-    # 	result.M = m3
-    # 	print(s3, e3, m3)
-    # 	return result
 
     def compare(self, other):
         e1 = self.E
@@ -237,10 +214,11 @@ class IEEE754_Float32:
     def __add__(self, other):
         # 일단 두수의 부호가 같은 경우만 취급
         s1 = self.S
-        s2 = other.S
         e1 = self.E
-        e2 = other.E
         m1 = self.M
+        
+        s2 = other.S
+        e2 = other.E
         m2 = other.M
 
         # 덧셈 전에 가수 M 위에 1.0을 붙여준다
@@ -297,25 +275,31 @@ class IEEE754_Float32:
             m3 = m1 + m2
         
         # 뺄셈에 해당하는 덧셈의 경우(즉, 두 부호가 다른 경우)
-        if add_type == PLUS_MINUS or add_type == MINUS_PLUS:       
+        if add_type == PLUS_MINUS or add_type == MINUS_PLUS: 
             m3_digits = self.countDigits(m3)
-            num_overflow_bits = m3_digits - (self.NUM_MENTISSA + 1) 
+            num_overflow_bits = m3_digits - (self.NUM_MENTISSA + 1)
             # 뺄셈의 결과로 오버플로우 없음
+            # 0.M의 형태임
+            
             if num_overflow_bits < 0:
-                # 모자라는 비트만큼 가수를 쉬프트하여 올려주어
-                # 1.M의 형태로 만듬
+                # print(bin(m3)[2:], len(bin(m3)[2:]) )  
+                # 0.M을 1.M으로 만들어주기 위해
+                # 가수를 쉬프트하여 올려줌
                 m3 = m3 << abs(num_overflow_bits)
-                # 그리고 1.을 소거하기 위해 2^23승을 빼주어
-                # 순수한 M 비트만 남김
-                m3 -= 2 ** (self.NUM_MENTISSA)
                 # M의 자리를 올려준만큼 반대로 지수를 빼줌 
-                e3 -= abs(diff_e)
+                e3 -= abs(num_overflow_bits)
+                # 그리고 1.을 소거하기 위해 2^num_mentissa승을 빼주어
+                # 순수한 M 비트만 남김
+                # print(bin(m3)[2:], len(bin(m3)[2:]) )  
+                m3 -= 2 ** (self.NUM_MENTISSA)
+                
+
 
             # 뺄셈의 결과로 오버플로우 발생
             elif num_overflow_bits > 0:
                 # 뺄셈의 결과에서 오버플로우는 버려야 함
                 # 따라서 가수에서 오버플로우를 제거하기 위해
-                # 오버플로우된 자리는 2^24에 있는 1을 빼줌
+                # 오버플로우된 자리는 2^(num_mentissa)에 있는 1을 빼줌
                 overflow_number = 2 ** (self.NUM_MENTISSA + 1)
                 m3 -= overflow_number 
                 # 그리고 나머지 가수의 자리수를 다시 계산
@@ -336,22 +320,47 @@ class IEEE754_Float32:
             # 만약 오버플로우가 일어났는지 검사
             if m3 > max_mentissa:
                 # 오버플로우가 일어났다면
-                # 가수 위의 비트를 삭제하기 위해
-                # 2^24승만큼 빼준후
-                overflow_number = 2 ** (self.NUM_MENTISSA + 1)
-                m3 -= overflow_number 
-                m3 -= 2 ** (self.NUM_MENTISSA)
+                # 가수부를 1자리 왼쪽으로 민다
+                m3 = m3 >> 1
                 # 지수를 한자리 올려준다
                 e3 += 1
-            # m3의 자리수를 다시 검사하여 가수와 지수를 정규화한다
-            m3_digits = self.countDigits(m3)
-            num_overflow_bits = m3_digits - (self.NUM_MENTISSA + 1) 
-            m3 = m3 << abs(num_overflow_bits)
-            e3 -= abs(num_overflow_bits)
+            # 가수 위의 비트를 삭제하기 위해
+            # 2^mentissa승만큼 빼준다
+            overflow_number = 2 ** (self.NUM_MENTISSA)
+            m3 -= overflow_number 
+            # print(bin(m3)[2:], len(bin(m3)[2:]))  
+            # print(e3)
             
         
-        result = IEEE754_Float32("0.0")
+        result = IEEE754_Float("0.0", self.precision)
         result.S = s3
         result.E = e3
         result.M = m3
         return result
+
+
+    # 뺄셈 
+    def __sub__(self, other):
+        a = self
+        b = other
+        # (+a) - (+b) ---> (a) + (-b)
+        if self.S == 0 and other.S == 0:
+            a.S = 0
+            b.S = 1
+
+        # (+a) - (-b) ---> (+a) + (+b)
+        elif self.S == 0 and other.S == 1:
+            a.S = 0
+            b.S = 0
+        
+        # (-a) - (+b) ---> (-a) + (-b)
+        elif self.S == 1 and other.S == 0:
+            a.S = 1
+            b.S = 1    
+
+        # (-a) - (-b) ---> (-a) + (+b)
+        else:
+            a.S = 1
+            b.S = 0
+
+        return a + b
